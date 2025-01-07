@@ -8,3 +8,5 @@
 build/
 CMakeFiles/
 CMakeCache.txt
+makefile
+build/
