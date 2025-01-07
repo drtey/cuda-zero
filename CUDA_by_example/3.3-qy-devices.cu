@@ -44,8 +44,11 @@ int main(void) {
         prop.maxThreadsDim[0], prop.maxThreadsDim[1],
         prop.maxThreadsDim[2] );
         printf( "* Max grid dimensions: (%d, %d, %d)\n",
+        
         prop.maxGridSize[0], prop.maxGridSize[1],
         prop.maxGridSize[2] );
+        printf( "* Major: %d\n", prop.major );
+        printf( "* Minor: %d\n", prop.minor );
         printf( "\n" );
 
     }

@@ -1,7 +1,6 @@
 # cuda-zero
 
-´´´
-make name=myfile.cu
-make name=myfile.cu debug=1
+```
+make 
 make clean    # Clean build files
-´´´
+```
