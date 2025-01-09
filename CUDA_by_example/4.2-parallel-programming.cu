@@ -1,49 +1,93 @@
+/*
+ * Copyright 1993-2010 NVIDIA Corporation.  All rights reserved.
+ *
+ * NVIDIA Corporation and its licensors retain all intellectual property and 
+ * proprietary rights in and to this software and related documentation. 
+ * Any use, reproduction, disclosure, or distribution of this software 
+ * and related documentation without an express license agreement from
+ * NVIDIA Corporation is strictly prohibited.
+ *
+ * Please refer to the applicable NVIDIA end user license agreement (EULA) 
+ * associated with this source code for terms and conditions that govern 
+ * your use of this NVIDIA software.
+ * 
+ */
+
+
 #include "book.h"
+#include "cpu_bitmap.h"
 
-#define N 10
+#define DIM 1000
 
-__global__ void add( int *a, int *b, int *c ) {
-    int tid = blockIdx.x; // handle the data at this index
-    if (tid < N)
-        c[tid] = a[tid] + b[tid];
+struct cuComplex {
+    float   r;
+    float   i;
+    // cuComplex( float a, float b ) : r(a), i(b)  {}
+    __device__ cuComplex( float a, float b ) : r(a), i(b) {} // Fix error for calling host function from device
+    __device__ float magnitude2( void ) {
+        return r * r + i * i;
+    }
+    __device__ cuComplex operator*(const cuComplex& a) {
+        return cuComplex(r*a.r - i*a.i, i*a.r + r*a.i);
+    }
+    __device__ cuComplex operator+(const cuComplex& a) {
+        return cuComplex(r+a.r, i+a.i);
+    }
+};
+
+__device__ int julia( int x, int y ) {
+    const float scale = 1.5;
+    float jx = scale * (float)(DIM/2 - x)/(DIM/2);
+    float jy = scale * (float)(DIM/2 - y)/(DIM/2);
+
+    cuComplex c(-0.8, 0.156);
+    cuComplex a(jx, jy);
+
+    int i = 0;
+    for (i=0; i<200; i++) {
+        a = a * a + c;
+        if (a.magnitude2() > 1000)
+            return 0;
+    }
+
+    return 1;
 }
 
-int main(void) {
-    int a[N], b[N], c[N];
-    int *dev_a, *dev_b, *dev_c;
+__global__ void kernel( unsigned char *ptr ) {
+    // map from blockIdx to pixel position
+    int x = blockIdx.x;
+    int y = blockIdx.y;
+    int offset = x + y * gridDim.x;
 
-    // alloc memory on the GPU
-    HANDLE_ERROR(cudaMalloc((void**)&dev_a, N * sizeof(int)));
-    HANDLE_ERROR(cudaMalloc((void**)&dev_b, N * sizeof(int)));
-    HANDLE_ERROR(cudaMalloc((void**)&dev_c, N * sizeof(int)));
+    // now calculate the value at that position
+    int juliaValue = julia( x, y );
+    ptr[offset*4 + 0] = 255 * juliaValue;
+    ptr[offset*4 + 1] = 0;
+    ptr[offset*4 + 2] = 0;
+    ptr[offset*4 + 3] = 255;
+}
 
-    // fill the arrays 'a' and 'b' on the CPU
-    for (int i=0; i<N; i++) {
-        a[i] = -i;
-        b[i] = i * i;
-    }
+// globals needed by the update routine
+struct DataBlock {
+    unsigned char   *dev_bitmap;
+};
 
-    // copy the arrays 'a' and 'b' on the GPU
-    HANDLE_ERROR(cudaMemcpy(dev_a, a, N * sizeof(int),
-        cudaMemcpyHostToDevice));
-    HANDLE_ERROR(cudaMemcpy(dev_b, b, N * sizeof(int),
-        cudaMemcpyHostToDevice));
+int main( void ) {
+    DataBlock   data;
+    CPUBitmap bitmap( DIM, DIM, &data );
+    unsigned char    *dev_bitmap;
 
-    add<<<N,1>>>( dev_a, dev_b, dev_c );
+    HANDLE_ERROR( cudaMalloc( (void**)&dev_bitmap, bitmap.image_size() ) );
+    data.dev_bitmap = dev_bitmap;
 
-    // copy the array 'c' back from the GPU to the CPU
-    HANDLE_ERROR(cudaMemcpy(c,dev_c, N * sizeof(int),
-        cudaMemcpyDeviceToHost));
+    dim3    grid(DIM,DIM);
+    kernel<<<grid,1>>>( dev_bitmap );
 
-    // display the results
-    for (int i=0; i<N; i++) {
-        printf( "%d + %d = %d\n", a[i], b[i], c[i]);
-    }
-
-    // free the memory allocated in the GPU
-    cudaFree(dev_a);
-    cudaFree(dev_b);
-    cudaFree(dev_c);
-
-    return 0;
+    HANDLE_ERROR( cudaMemcpy( bitmap.get_ptr(), dev_bitmap,
+                              bitmap.image_size(),
+                              cudaMemcpyDeviceToHost ) );
+                              
+    HANDLE_ERROR( cudaFree( dev_bitmap ) );
+                              
+    bitmap.display_and_exit();
 }
