@@ -28,7 +28,6 @@ __device__ int julia(int x, int y, float time) {
     float jx = scale * (float)(DIM / 2 - x) / (DIM / 2);
     float jy = scale * (float)(DIM / 2 - y) / (DIM / 2);
 
-    // Variar el valor de c para movimiento más interesante
     cuComplex c(cosf(time) * 0.5f, sinf(time) * 0.5f);
     cuComplex a(jx, jy);
 
@@ -36,7 +35,7 @@ __device__ int julia(int x, int y, float time) {
     for (i = 0; i < 200; i++) {
         a = a * a + c;
         if (a.magnitude2() > 1000) {
-            return i; // Devolver el número de iteraciones
+            return i;
         }
     }
     return 0;
@@ -49,11 +48,10 @@ __global__ void kernel(unsigned char *ptr, float time) {
     
     int isJulia = julia(x, y, time);
 
-    // Cambiar colores basados en el número de iteraciones
-    ptr[offset*4 + 0] = (isJulia * 7) % 256; // Rojo
-    ptr[offset*4 + 1] = (isJulia * 13) % 256; // Verde
-    ptr[offset*4 + 2] = (isJulia * 23) % 256; // Azul
-    ptr[offset*4 + 3] = 255; // Alpha
+    ptr[offset*4 + 0] = (isJulia * 7) % 256;
+    ptr[offset*4 + 1] = (isJulia * 13) % 256; 
+    ptr[offset*4 + 2] = (isJulia * 23) % 256; 
+    ptr[offset*4 + 3] = 255;
 }
 
 struct DataBlock {
@@ -70,7 +68,6 @@ void generateFrame(DataBlock *d, int ticks) {
     dim3 grid(DIM, DIM);
     kernel<<<grid, 1>>>(d->dev_bitmap, time);
     
-    // Modificar el tiempo con una oscilación suave
     time += 0.02f * sinf(ticks * 0.01f);
     
     HANDLE_ERROR(cudaMemcpy(d->bitmap->get_ptr(), d->dev_bitmap, d->bitmap->image_size(), cudaMemcpyDeviceToHost));
